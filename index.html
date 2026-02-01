@@ -110,10 +110,14 @@ z-index: 6
 
 <script>
 const levels = [
-  { target:"Cat",  emoji:"🐱", words:["Cat","Dog","Bird","Fish"], image:"images/cat.png" },
-  { target:"Dog",  emoji:"🐶", words:["Dog","Cat","Cow","Pig"],   image:"images/dog.png" },
-  { target:"Bird", emoji:"🐦", words:["Bird","Fish","Lion","Dog"],image:"images/bird.png" },
-  { target:"Fish", emoji:"🐟", words:["Fish","Cat","Dog","Bird"], image:"images/fish.png" }
+  { target:"Cat",  emoji:"🐱", words:["Cat","Dog","Monkey","Lion"], image:"images/cat.png" },
+  { target:"Dog",  emoji:"🐶", words:["Dog","Cat","Cow","Frog"],   image:"images/dog.png" },
+  { target:"Monkey", emoji:"🐵", words:["Monkey","Jellyfish","Lion","Dog"],image:"images/monkey.png" },
+  { target:"Jellyfish", emoji:"🪼", words:["Jellyfish","Cat","Dog","Monkey"], image:"images/jellyfish.png" },
+  { target:"Lion", emoji:"🦁", words:["Lion","Tiger","Jellyfish","Elephant"], image:"images/lion.png" },
+  { target:"Frog", emoji:"🐸", words:["Frog","Cat","Bear","Dog"], image:"images/frog.png" }
+
+
 ];
 
 function shuffle(arr){
@@ -130,6 +134,9 @@ let spawnInterval = 2500;
 let score=0, lives=3, levelIndex=0, speed=1.5;
 let gameOver=false, isPaused=true;
 let words=[], lastSpawn=0;
+let correctOnThisAnimal = 0;
+let animalStartTime = Date.now();
+
 
 const player=document.getElementById("player");
 const targetEl=document.getElementById("target");
@@ -138,6 +145,9 @@ const heartsEl=document.getElementById("hearts");
 const levelUp=document.getElementById("levelUp");
 const message=document.getElementById("message");
 const game=document.getElementById("game");
+const MAX_CORRECT = 5;   // N
+const MAX_TIME = 40000; // T = 40 ثانیه
+
 
 function updateUI(){
   const lvl=shuffledLevels[levelIndex];
@@ -192,6 +202,18 @@ function endGame(){
   message.textContent="Game Over!";
 }
 
+function nextAnimal(){
+  levelIndex = (levelIndex + 1) % shuffledLevels.length;
+
+  correctOnThisAnimal = 0;
+  animalStartTime = Date.now();
+
+  clearWords();
+  showLevelUp();
+  updateUI();
+}
+
+
 function speakWord(text){
   const utter=new SpeechSynthesisUtterance(text);
   utter.lang="en-US";
@@ -200,86 +222,89 @@ function speakWord(text){
 }
 
 function gameLoop(t){
-  if(gameOver||isPaused){ requestAnimationFrame(gameLoop); return; }
+  if(gameOver || isPaused){ 
+    requestAnimationFrame(gameLoop); 
+    return; 
+  }
 
-  if(t-lastSpawn > spawnInterval){
-  spawnWord();
-  lastSpawn = t;
-}
+  const now = Date.now();
 
-  
+  // تغییر حیوان بر اساس تعداد صحیح یا زمان
+  if(correctOnThisAnimal >= MAX_CORRECT || now - animalStartTime >= MAX_TIME){
+    nextAnimal();
+  }
 
-  const pRect=player.getBoundingClientRect();
+  // ایجاد کلمات جدید
+  if(t - lastSpawn > spawnInterval){
+    spawnWord();
+    lastSpawn = t;
+  }
 
-  for(let i=words.length-1;i>=0;i--){
-    const w=words[i];
-    if(w.toRemove) {
+  const pRect = player.getBoundingClientRect();
+
+  for(let i = words.length - 1; i >= 0; i--){
+    const w = words[i];
+
+    if(w.toRemove){
       w.el.remove();
       words.splice(i,1);
       continue;
     }
 
+    // حرکت کلمه
     if(!w.caught){
-      w.y+=speed;
-      w.el.style.top=w.y+"px";
+      w.y += speed;
+      w.el.style.top = w.y + "px";
     }
 
-    const wRect=w.el.getBoundingClientRect();
+    const wRect = w.el.getBoundingClientRect();
 
-    // برخورد
-    const hitMargin = 10; // پیکسل
+    // برخورد با پلیر
+    const hitMargin = 10; 
+    const safeLeft   = pRect.left + hitMargin;
+    const safeRight  = pRect.right - hitMargin;
+    const safeTop    = pRect.top + hitMargin;
+    const safeBottom = pRect.bottom - hitMargin;
 
-const safeLeft   = pRect.left + hitMargin;
-const safeRight  = pRect.right - hitMargin;
-const safeTop    = pRect.top + hitMargin;
-const safeBottom = pRect.bottom - hitMargin;
-
-if(
-  !w.caught &&
-  wRect.bottom >= safeTop &&
-  wRect.top <= safeBottom &&
-  wRect.left <= safeRight &&
-  wRect.right >= safeLeft
-){
-  // برخورد ثبت شد
-
-
+    if(!w.caught &&
+       wRect.bottom >= safeTop &&
+       wRect.top <= safeBottom &&
+       wRect.left <= safeRight &&
+       wRect.right >= safeLeft
+    ){
+      w.caught = true; // خیلی مهم! ثبت یکبار برخورد
 
       if(w.isTarget){
+        correctOnThisAnimal++;
+        score++;
         w.el.classList.add("correct");
         speakWord(w.el.textContent);
-        score++;
-        speed=Math.min(speed+0.2,6);
-        spawnInterval = Math.max(spawnInterval-120, 700);
 
-        if(score%5===0){
-          levelIndex=(levelIndex+1)%shuffledLevels.length;
-          clearWords();
-          showLevelUp();
-        }
+        // افزایش سختی
+        speed = Math.min(speed + 0.2, 6);
+        spawnInterval = Math.max(spawnInterval - 120, 700);
+
       }else{
         w.el.classList.add("wrong");
         lives--;
-        if(lives<=0) endGame();
+        if(lives <= 0) endGame();
       }
 
       updateUI();
 
-      // حذف ایمن با تاخیر
+      // حذف امن با تاخیر
       setTimeout(()=>{
-        w.toRemove=true;
-      },400);
+        w.toRemove = true;
+      }, 400);
 
       continue;
     }
 
-    // افتادن کامل از پایین صفحه
+    // افتادن کلمه از پایین زمین
     const groundHeight = document.getElementById("ground").offsetHeight;
-
-if(w.y + w.el.offsetHeight > window.innerHeight - groundHeight){
-  w.toRemove = true;
-}
-
+    if(w.y + w.el.offsetHeight > window.innerHeight - groundHeight){
+      w.toRemove = true;
+    }
   }
 
   requestAnimationFrame(gameLoop);
