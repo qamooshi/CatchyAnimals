@@ -8,7 +8,13 @@
 <style>
   * { box-sizing: border-box; }
   body { margin:0; background:#fef6e4; font-family:Arial; overflow:hidden; }
-  #game { position:relative; width:100vw; height:100vh; }
+   #game {
+  position: relative;
+  width: 100vw;
+  height: calc(var(--vh, 1vh) * 100); /* به جای 100vh */
+  overflow: hidden; /* جلوگیری از اسکرول */
+}
+
 
   #topBar {
     position:absolute; top:0; width:100%; height:70px;
@@ -43,21 +49,28 @@ z-index:7;
     font-size:32px; top:40%; display:none; z-index:30;
   }
 
-  #controls {
-    position:absolute; bottom:0; width:100%;
-    display:flex; justify-content:space-around;
-    padding:10px; background:#fff;
-z-index: 6
-  }
+#startBtn {
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%, -50%);
+  font-size:28px;
+  padding:18px 40px;
+  border-radius:30px;
+  border:none;
+  background:#8bd3dd;
+  z-index:50;
+display:block;
+}
+ 
+#pauseBtn {
+  font-size:28px;
+  
+  border-radius:12px;
+  border:none;
+  background:#fff;
+}
 
-  button {
-    padding:12px 18px;
-    border-radius:18px;
-    border:none;
-    font-size:18px;
-    background:#8bd3dd;
-    width:30%;
-  }
 #levelUp {
   position:absolute;
   width:100%;
@@ -85,8 +98,58 @@ z-index: 6
   z-index: 5;
 }
 
+#gameOverScreen {
+  position: fixed;
+  inset: 0;
+  background: #fef6e4;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+#gameOverScreen h1 {
+  font-size: 48px;
+  margin-bottom: 20px;
+}
+
+#gameOverScreen p {
+  font-size: 28px;
+  margin-bottom: 30px;
+}
+
+#gameOverScreen button {
+  font-size: 22px;
+  padding: 14px 30px;
+  border-radius: 20px;
+  border: none;
+  background: #8bd3dd;
+}
+
+
 </style>
+<script>
+  // محاسبه ارتفاع واقعی صفحه برای موبایل
+  let vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
+
+  window.addEventListener('resize', () => {
+    vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+  });
+</script>
 </head>
+
+
+<audio id="bgMusic" loop>
+  <source src="audio/background.mp3" type="audio/mpeg">
+</audio>
+
+<audio id="errorSound">
+  <source src="audio/error.mp3" type="audio/mpeg">
+</audio>
+
 
 <body>
 <div id="game">
@@ -94,28 +157,35 @@ z-index: 6
     <div id="target"></div>
     <div id="score"></div>
     <div id="hearts"></div>
+<button id="pauseBtn" onclick="togglePause()">⏸</button>
+
+
+
   </div>
 
   <div id="player"></div>
   <div id="message"></div>
   <div id="levelUp"></div>
+  <button id="startBtn" onclick="startGame()">Start</button>
 
-  <div id="controls">
-    <button onclick="startGame()">Start</button>
-    <button onclick="pauseGame()">Pause</button>
-    <button onclick="restartGame()">Restart</button>
   </div>
-</div>
 <div id="ground"></div>
+
+<div id="gameOverScreen">
+  <h1>Game Over</h1>
+  <p id="finalScore"></p>
+  <button onclick="restartGame()">Play Again</button>
+</div>
+
 
 <script>
 const levels = [
-  { target:"Cat",  emoji:"🐱", words:["Cat","Dog","Monkey","Lion"], image:"images/cat.png" },
-  { target:"Dog",  emoji:"🐶", words:["Dog","Cat","Cow","Frog"],   image:"images/dog.png" },
-  { target:"Monkey", emoji:"🐵", words:["Monkey","Jellyfish","Lion","Dog"],image:"images/monkey.png" },
-  { target:"Jellyfish", emoji:"🪼", words:["Jellyfish","Cat","Dog","Monkey"], image:"images/jellyfish.png" },
-  { target:"Lion", emoji:"🦁", words:["Lion","Tiger","Jellyfish","Elephant"], image:"images/lion.png" },
-  { target:"Frog", emoji:"🐸", words:["Frog","Cat","Bear","Dog"], image:"images/frog.png" }
+  { target:"Cat",  emoji:"🐱", words:["Cat","Dog","Monkey","Lion"], image:"images/cat.png", bg:"#FFC4C4" },
+  { target:"Dog",  emoji:"🐶", words:["Dog","Cat","Cow","Frog"],   image:"images/dog.png", bg:"#7DD19E" },
+  { target:"Monkey", emoji:"🐵", words:["Monkey","Jellyfish","Lion","Dog"],image:"images/monkey.png", bg:"#D8C4FF" },
+  { target:"Jellyfish", emoji:"🪼", words:["Jellyfish","Cat","Dog","Monkey"], image:"images/jellyfish.png", bg:"#C4DDFF" },
+  { target:"Lion", emoji:"🦁", words:["Lion","Tiger","Jellyfish","Elephant"], image:"images/lion.png", bg:"#FFF3C4" },
+  { target:"Frog", emoji:"🐸", words:["Frog","Cat","Bear","Dog"], image:"images/frog.png", bg:"#E0FFC4" }
 
 
 ];
@@ -130,12 +200,14 @@ function shuffle(arr){
 let shuffledLevels=[...levels];
 shuffle(shuffledLevels);
 
-let spawnInterval = 2500;
-let score=0, lives=3, levelIndex=0, speed=1.5;
+let spawnInterval = 2000;
+let score=0, lives=3, levelIndex=0, speed=2.4;
 let gameOver=false, isPaused=true;
 let words=[], lastSpawn=0;
 let correctOnThisAnimal = 0;
 let animalStartTime = Date.now();
+let hasStarted = false;
+let pauseStartTime = 0;
 
 
 const player=document.getElementById("player");
@@ -147,6 +219,9 @@ const message=document.getElementById("message");
 const game=document.getElementById("game");
 const MAX_CORRECT = 5;   // N
 const MAX_TIME = 40000; // T = 40 ثانیه
+const startBtn = document.getElementById("startBtn");
+const pauseBtn = document.getElementById("pauseBtn");
+const bgMusic = document.getElementById("bgMusic");
 
 
 function updateUI(){
@@ -155,6 +230,8 @@ function updateUI(){
   scoreEl.textContent=`Score: ${score}`;
   heartsEl.textContent="❤️".repeat(lives);
   player.style.backgroundImage=`url('${lvl.image}')`;
+  game.style.background = lvl.bg;
+
 }
 
 // فقط فلگ می‌کنیم، حذف واقعی داخل loop
@@ -197,9 +274,17 @@ function showLevelUp(){
 }
 
 function endGame(){
-  gameOver=true;
-  message.style.display="block";
-  message.textContent="Game Over!";
+  gameOver = true;
+  isPaused = true;
+ bgMusic.pause();
+  setTimeout(() => {
+    document.getElementById("game").style.display = "none";
+    const screen = document.getElementById("gameOverScreen");
+    screen.style.display = "flex";
+
+    document.getElementById("finalScore").textContent =
+      "Final Score: " + score;
+  }, 500);
 }
 
 function nextAnimal(){
@@ -211,6 +296,35 @@ function nextAnimal(){
   clearWords();
   showLevelUp();
   updateUI();
+}
+
+function startGame(){
+  hasStarted = true;
+  isPaused = false;
+  startBtn.style.display = "none";
+  pauseBtn.textContent = "⏸";
+bgMusic.play();
+}
+
+function togglePause(){
+  if(!hasStarted) return;
+
+  isPaused = !isPaused;
+
+  if(isPaused){
+    pauseStartTime = Date.now();
+    pauseBtn.textContent = "▶";
+    bgMusic.pause(); 
+  }else{
+    const pausedDuration = Date.now() - pauseStartTime;
+    animalStartTime += pausedDuration;
+    pauseBtn.textContent = "⏸";
+    bgMusic.play();
+  }
+}
+
+function restartGame(){
+  location.reload();
 }
 
 
@@ -281,13 +395,18 @@ function gameLoop(t){
         speakWord(w.el.textContent);
 
         // افزایش سختی
-        speed = Math.min(speed + 0.2, 6);
-        spawnInterval = Math.max(spawnInterval - 120, 700);
+        speed = Math.min(speed + 0.2, 8);
+        spawnInterval = Math.max(spawnInterval - 120, 600);
 
       }else{
         w.el.classList.add("wrong");
         lives--;
-        if(lives <= 0) endGame();
+       
+ const errorSound = document.getElementById("errorSound");
+  errorSound.currentTime = 0; // اگر چند بار پشت سر هم شد، از اول پخش کن
+  errorSound.play();
+
+       if(lives <= 0) endGame();
       }
 
       updateUI();
@@ -328,10 +447,6 @@ window.addEventListener("mouseup",()=>drag=false);
 window.addEventListener("mousemove",e=>{
   if(drag&&!isPaused&&!gameOver) movePlayer(e.clientX);
 });
-
-function startGame(){ isPaused=false; }
-function pauseGame(){ isPaused=true; }
-function restartGame(){ location.reload(); }
 
 updateUI();
 requestAnimationFrame(gameLoop);
