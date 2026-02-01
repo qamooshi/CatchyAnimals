@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Word Catcher - Stable Final</title>
+
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; background:#fef6e4; font-family:Arial; overflow:hidden; }
+  #game { position:relative; width:100vw; height:100vh; }
+
+  #topBar {
+    position:absolute; top:0; width:100%; height:70px;
+    background:#fff; display:flex; justify-content:space-between;
+    align-items:center; padding:10px 12px; z-index:20;
+  }
+
+  #player {
+    position:absolute; bottom:78px; left: calc(50% - 45px); 
+    
+    width:90px; height:90px;
+    background:url('images/cat.png') no-repeat center/contain;
+    touch-action:none;
+z-index:7;
+  }
+
+  .word {
+    position:absolute;
+    padding:12px 28px;
+    background:#ffd803;
+    border-radius:18px;
+    font-size:26px;
+    font-weight:bold;
+    user-select:none;
+  }
+
+  .word.correct { background:#7CFF7C; }
+  .word.wrong   { background:#FF7C7C; }
+
+  #message,#levelUp {
+    position:absolute; width:100%; text-align:center;
+    font-size:32px; top:40%; display:none; z-index:30;
+  }
+
+  #controls {
+    position:absolute; bottom:0; width:100%;
+    display:flex; justify-content:space-around;
+    padding:10px; background:#fff;
+z-index: 6
+  }
+
+  button {
+    padding:12px 18px;
+    border-radius:18px;
+    border:none;
+    font-size:18px;
+    background:#8bd3dd;
+    width:30%;
+  }
+#levelUp {
+  position:absolute;
+  width:100%;
+  text-align:center;
+  font-size:40px;
+  top:40%;
+  z-index:30;
+  color:#333;
+  font-weight:bold;
+  animation: none;
+}
+
+@keyframes levelPop {
+  0%   { transform:scale(0.4); opacity:0; }
+  60%  { transform:scale(1.2); opacity:1; }
+  100% { transform:scale(1);   opacity:1; }
+}
+#ground {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 80px;       /* ارتفاع زمین */
+  background: #654321; /* رنگ زمین (قهوه‌ای) */
+  z-index: 5;
+}
+
+</style>
+</head>
+
+<body>
+<div id="game">
+  <div id="topBar">
+    <div id="target"></div>
+    <div id="score"></div>
+    <div id="hearts"></div>
+  </div>
+
+  <div id="player"></div>
+  <div id="message"></div>
+  <div id="levelUp"></div>
+
+  <div id="controls">
+    <button onclick="startGame()">Start</button>
+    <button onclick="pauseGame()">Pause</button>
+    <button onclick="restartGame()">Restart</button>
+  </div>
+</div>
+<div id="ground"></div>
+
+<script>
+const levels = [
+  { target:"Cat",  emoji:"🐱", words:["Cat","Dog","Bird","Fish"], image:"images/cat.png" },
+  { target:"Dog",  emoji:"🐶", words:["Dog","Cat","Cow","Pig"],   image:"images/dog.png" },
+  { target:"Bird", emoji:"🐦", words:["Bird","Fish","Lion","Dog"],image:"images/bird.png" },
+  { target:"Fish", emoji:"🐟", words:["Fish","Cat","Dog","Bird"], image:"images/fish.png" }
+];
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+}
+
+let shuffledLevels=[...levels];
+shuffle(shuffledLevels);
+
+let spawnInterval = 2500;
+let score=0, lives=3, levelIndex=0, speed=1.5;
+let gameOver=false, isPaused=true;
+let words=[], lastSpawn=0;
+
+const player=document.getElementById("player");
+const targetEl=document.getElementById("target");
+const scoreEl=document.getElementById("score");
+const heartsEl=document.getElementById("hearts");
+const levelUp=document.getElementById("levelUp");
+const message=document.getElementById("message");
+const game=document.getElementById("game");
+
+function updateUI(){
+  const lvl=shuffledLevels[levelIndex];
+  targetEl.textContent=`Catch: ${lvl.target} ${lvl.emoji}`;
+  scoreEl.textContent=`Score: ${score}`;
+  heartsEl.textContent="❤️".repeat(lives);
+  player.style.backgroundImage=`url('${lvl.image}')`;
+}
+
+// فقط فلگ می‌کنیم، حذف واقعی داخل loop
+function clearWords(){
+  words.forEach(w => w.toRemove = true);
+}
+
+function spawnWord(){
+  const lvl=shuffledLevels[levelIndex];
+  const text=lvl.words[Math.floor(Math.random()*lvl.words.length)];
+  const el=document.createElement("div");
+  el.className="word";
+  el.textContent=text;
+  el.style.left=Math.random()*(window.innerWidth-150)+"px";
+  el.style.top="80px";
+  game.appendChild(el);
+
+  words.push({
+    el,
+    y:80,
+    isTarget:text.toLowerCase()===lvl.target.toLowerCase(),
+    caught:false,
+    toRemove:false
+  });
+}
+
+function showLevelUp(){
+  const lvl=shuffledLevels[levelIndex];
+  levelUp.style.display="block";
+  levelUp.textContent=`NEW TARGET!\n${lvl.target} ${lvl.emoji}`;
+
+  // ریست انیمیشن
+  levelUp.style.animation="none";
+  levelUp.offsetHeight; // force reflow
+  levelUp.style.animation="levelPop 0.6s ease";
+
+  setTimeout(()=>{
+    levelUp.style.display="none";
+  },1200);
+}
+
+function endGame(){
+  gameOver=true;
+  message.style.display="block";
+  message.textContent="Game Over!";
+}
+
+function speakWord(text){
+  const utter=new SpeechSynthesisUtterance(text);
+  utter.lang="en-US";
+  utter.rate=0.8;
+  speechSynthesis.speak(utter);
+}
+
+function gameLoop(t){
+  if(gameOver||isPaused){ requestAnimationFrame(gameLoop); return; }
+
+  if(t-lastSpawn > spawnInterval){
+  spawnWord();
+  lastSpawn = t;
+}
+
+  
+
+  const pRect=player.getBoundingClientRect();
+
+  for(let i=words.length-1;i>=0;i--){
+    const w=words[i];
+    if(w.toRemove) {
+      w.el.remove();
+      words.splice(i,1);
+      continue;
+    }
+
+    if(!w.caught){
+      w.y+=speed;
+      w.el.style.top=w.y+"px";
+    }
+
+    const wRect=w.el.getBoundingClientRect();
+
+    // برخورد
+    const hitMargin = 10; // پیکسل
+
+const safeLeft   = pRect.left + hitMargin;
+const safeRight  = pRect.right - hitMargin;
+const safeTop    = pRect.top + hitMargin;
+const safeBottom = pRect.bottom - hitMargin;
+
+if(
+  !w.caught &&
+  wRect.bottom >= safeTop &&
+  wRect.top <= safeBottom &&
+  wRect.left <= safeRight &&
+  wRect.right >= safeLeft
+){
+  // برخورد ثبت شد
+
+
+
+      if(w.isTarget){
+        w.el.classList.add("correct");
+        speakWord(w.el.textContent);
+        score++;
+        speed=Math.min(speed+0.2,6);
+        spawnInterval = Math.max(spawnInterval-120, 700);
+
+        if(score%5===0){
+          levelIndex=(levelIndex+1)%shuffledLevels.length;
+          clearWords();
+          showLevelUp();
+        }
+      }else{
+        w.el.classList.add("wrong");
+        lives--;
+        if(lives<=0) endGame();
+      }
+
+      updateUI();
+
+      // حذف ایمن با تاخیر
+      setTimeout(()=>{
+        w.toRemove=true;
+      },400);
+
+      continue;
+    }
+
+    // افتادن کامل از پایین صفحه
+    const groundHeight = document.getElementById("ground").offsetHeight;
+
+if(w.y + w.el.offsetHeight > window.innerHeight - groundHeight){
+  w.toRemove = true;
+}
+
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+function movePlayer(x){
+  player.style.left =
+    Math.max(0,
+      Math.min(window.innerWidth-player.offsetWidth,
+      x-player.offsetWidth/2)
+    )+"px";
+}
+
+player.addEventListener("touchmove",e=>{
+  if(!isPaused&&!gameOver) movePlayer(e.touches[0].clientX);
+});
+
+let drag=false;
+player.addEventListener("mousedown",()=>drag=true);
+window.addEventListener("mouseup",()=>drag=false);
+window.addEventListener("mousemove",e=>{
+  if(drag&&!isPaused&&!gameOver) movePlayer(e.clientX);
+});
+
+function startGame(){ isPaused=false; }
+function pauseGame(){ isPaused=true; }
+function restartGame(){ location.reload(); }
+
+updateUI();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
