@@ -128,6 +128,7 @@ font-weight: bold;
   border-radius:30px;
   border:none;
   background:#ffde59;
+box-shadow: 4px 4px 0 #ff6a6a;
   z-index:50;
 display:block;
 }
@@ -223,6 +224,26 @@ display:block;
   transition: background 0.2s ease; /* برای fade */
 }
 
+#bottomArrow {
+  position: fixed;
+  bottom: 5px;   /* کمی بالاتر از زمین */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160px;
+  z-index: 60;
+  display: none;
+  opacity: 0.9;
+}
+
+.heart {
+  position:absolute;
+  width: 48px;
+  height: 48px;
+  background: url('images/heart.png') no-repeat center/contain;
+  user-select:none;
+  pointer-events:none;
+}
+
 
 </style>
 <script>
@@ -280,6 +301,7 @@ display:block;
   <span class="line2">Avoid the wrong ones!</span>
 </div>
 
+<img id="bottomArrow" src="images/arrow.png" />
 
 <script>
 const levels = [
@@ -329,6 +351,8 @@ const MAX_TIME = 40000; // T = 40 ثانیه
 const startBtn = document.getElementById("startBtn");
 const pauseBtn = document.getElementById("pauseBtn");
 const bgMusic = document.getElementById("bgMusic");
+const bottomArrow = document.getElementById("bottomArrow");
+
 const praiseMessages = [
   "Nice work!",
   "Good job!",
@@ -375,6 +399,52 @@ game.appendChild(el);
   });
 }
 
+function isSafePosition(x, y, width=50, height=50){
+  for(const w of words){
+    const rect = w.el.getBoundingClientRect();
+    const wx = rect.left;
+    const wy = rect.top;
+    const ww = rect.width;
+    const wh = rect.height;
+
+    if( x < wx + ww &&
+        x + width > wx &&
+        y < wy + wh &&
+        y + height > wy ){
+      return false;
+    }
+  }
+  return true;
+}
+
+
+
+function spawnHeart(){
+  let x, y;
+  let tries = 0;
+
+  do {
+    x = Math.random()*(window.innerWidth-50);
+    y = -80; // همیشه از بالا شروع می‌کنه
+    tries++;
+  } while(!isSafePosition(x, y) && tries < 10);
+
+  const el = document.createElement("div");
+  el.className = "heart";
+  el.style.left = x+"px";
+  el.style.top = y+"px";
+  game.appendChild(el);
+
+  words.push({
+    el,
+    y: y,
+    isHeart:true,
+    caught:false,
+    toRemove:false
+  });
+}
+
+
 function showLevelUp(){
   const lvl=shuffledLevels[levelIndex];
   levelUp.style.display="block";
@@ -420,6 +490,8 @@ function startGame() {
   if(hasStarted) return;
   hasStarted = true;
 
+bgMusic.play().catch(()=>{});
+
   startBtn.style.display = "none";  // مخفی کردن دکمه Start
   animalStartTime = Date.now();
   isPaused = true;                  // اول Pause باشه
@@ -427,10 +499,12 @@ function startGame() {
   // مرحله اول: نمایش پیام راهنما
   const guide = document.getElementById('guideMessage');
   guide.style.display = 'block';
+bottomArrow.style.display = 'block';
+
 
   setTimeout(() => {
     guide.style.display = 'none';  // مخفی شدن پیام راهنما
-
+bottomArrow.style.display = 'none';
     // مرحله دوم: نمایش پیام اولین حیوان
     const lvl = shuffledLevels[levelIndex];
     levelUp.style.display = "block";
@@ -491,6 +565,11 @@ else if(!isTransitioning && now - animalStartTime >= MAX_TIME){
   // ایجاد کلمات جدید
   if(t - lastSpawn > spawnInterval){
     spawnWord();
+
+if(lives === 1 && Math.random() < 0.1){
+    spawnHeart(); // ۵٪ احتمال
+  }
+
     lastSpawn = t;
   }
 
@@ -536,6 +615,16 @@ else if(!isTransitioning && now - animalStartTime >= MAX_TIME){
        wRect.right >= safeLeft
     ){
       w.caught = true; // خیلی مهم! ثبت یکبار برخورد
+
+
+if(w.isHeart){
+  lives = Math.min(lives + 1, 3); // سقف ۳ جون
+  updateUI();
+  w.toRemove = true;
+  continue;
+}
+
+
 
       if(w.isTarget){
         correctOnThisAnimal++;
@@ -626,6 +715,7 @@ function transitionToNextAnimal(isSuccess){
 
   }, 1000); // ۱.۸ ثانیه پیام
 }
+
 
 
 function movePlayer(x){
