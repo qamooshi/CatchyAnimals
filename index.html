@@ -175,11 +175,15 @@ display:block;
 #gameOverScreen h1 {
   font-size: 48px;
   margin-bottom: 20px;
+color: #ff6a6a;
+text-shadow:4px 4px 0 #6aafff;
 }
 
 #gameOverScreen p {
-  font-size: 28px;
-  margin-bottom: 30px;
+  
+  margin-bottom: 50px;
+
+text-align: center
 }
 
 #gameOverScreen button {
@@ -187,7 +191,24 @@ display:block;
   padding: 14px 30px;
   border-radius: 20px;
   border: none;
-  background: #8bd3dd;
+  background: #ffde59;
+color: #ff6a6a;
+}
+
+.score-value {
+  font-size: 78px;
+  font-weight: bold;
+ 
+  margin-bottom: 16px;
+  color: #ffde59;
+  text-shadow: 2px 2px 0 #ff6a6a, 4px 4px 0 #6aafff;
+}
+
+.best-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #6aafff;
+  opacity: 0.9;
 }
 
 
@@ -244,6 +265,26 @@ display:block;
   pointer-events:none;
 }
 
+#newRecordBadge {
+  display: none;
+  margin-top: 10px;
+  font-size: 20px;
+  font-weight: bold;
+  color: #ffde59;
+  text-shadow: 2px 2px 0 #ff6a6a, 4px 4px 0 #6aafff;
+  animation: recordBounce 0.8s ease infinite alternate;
+}
+
+@keyframes recordBounce {
+  from {
+    transform: scale(0.9) rotate(-2deg);
+  }
+  to {
+    transform: scale(1.1) rotate(2deg);
+  }
+}
+
+
 
 </style>
 <script>
@@ -292,6 +333,7 @@ display:block;
 
 <div id="gameOverScreen">
   <h1>Game Over</h1>
+  <div id="newRecordBadge">🎉 New Record! 🎉</div>  
   <p id="finalScore"></p>
   <button onclick="restartGame()">Play Again</button>
 </div>
@@ -467,17 +509,34 @@ function showLevelUp(){
   },1200);
 }
 
+let highScore = parseInt(localStorage.getItem("wordCatcherHighScore")) || 0;
+
 function endGame(){
   gameOver = true;
   isPaused = true;
- bgMusic.pause();
+  bgMusic.pause();
+
+const newRecordBadge = document.getElementById("newRecordBadge");
+
+  if(score > highScore){
+    highScore = score;
+    localStorage.setItem("wordCatcherHighScore", highScore);
+    newRecordBadge.style.display = "block"; // 👈 این مهمه
+  } else {
+    newRecordBadge.style.display = "none";
+  }
+  
+
   setTimeout(() => {
     document.getElementById("game").style.display = "none";
     const screen = document.getElementById("gameOverScreen");
     screen.style.display = "flex";
 
-    document.getElementById("finalScore").textContent =
-      "Final Score: " + score;
+    document.getElementById("finalScore").innerHTML = `
+  <div class="score-value">${score}</div>
+  <div class="best-value">Best: ${highScore}</div>
+`;
+
   }, 500);
 }
 
